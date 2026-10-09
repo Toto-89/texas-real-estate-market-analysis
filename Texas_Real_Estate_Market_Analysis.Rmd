@@ -1,0 +1,1101 @@
+
+---
+title: "Texas Real Estate Market Analysis"
+author: "Salvatore Spagnolo"
+date: "2026-10-01"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+
+options(scipen = 999)
+```
+
+# Texas Realty Insights
+
+This project analyses historical real estate market data for four Texas cities between 2010 and 2014.
+
+The objective is to identify sales trends, evaluate variability and distributional characteristics, investigate seasonal patterns, compare cities and periods, and provide statistical insights that may support business decisions.
+
+```{r data-import}
+case <- read.csv("realestate_texas.csv")
+
+library(ggplot2)
+
+# Statistical classification of the dataset variables.
+statistical_types <- c(
+  city = "Qualitative nominal",
+  year = "Quantitative continuous (analysed as ordinal qualitative)",
+  month = "Qualitative nominal (cyclical, numerically coded)",
+  sales = "Discrete quantitative",
+  volume = "Continuous quantitative (ratio scale)",
+  median_price = "Continuous quantitative (ratio scale)",
+  listings = "Discrete quantitative",
+  months_inventory = "Continuous quantitative (ratio scale)"
+)
+
+data_structure <- data.frame(
+  Variable = names(case),
+  `Statistical Type` = unname(statistical_types[names(case)]),
+  check.names = FALSE
+)
+
+knitr::kable(
+  data_structure,
+  caption = "Dataset Variables and Statistical Types",
+  row.names = FALSE
+)
+```
+
+# Variable Analysis
+
+The dataset contains 240 observations covering four cities over 60 months, from January 2010 to December 2014.
+
+Each row represents one city in one specific month and year. The dataset therefore combines a geographical dimension with a time dimension.
+
+The variables can be classified as follows:
+
+- **city**: qualitative nominal variable. It identifies the city associated with each observation.
+- **year**: quantitative continuous variable that, in this analysis, is treated as an ordinal qualitative variable because it represents ordered time periods.
+- **month**: qualitative nominal cyclical variable encoded numerically. The numerical codes represent the months of the year and should not be interpreted as ordinary quantitative measurements.
+- **sales**: discrete quantitative variable representing the number of properties sold in each city-month.
+- **volume**: continuous quantitative variable, measured on a ratio scale, representing the total value of sales in millions of US dollars.
+- **median_price**: continuous quantitative variable, measured on a ratio scale, representing the median property sale price for each city-month.
+- **listings**: discrete quantitative variable representing the number of active property listings.
+- **months_inventory**: continuous quantitative variable, measured on a ratio scale, indicating the estimated number of months required to sell the current inventory.
+
+Measures of position, variability and shape are appropriate for the quantitative variables `sales`, `volume`, `median_price`, `listings` and `months_inventory`.
+
+The continuous quantitative variables are measured on a ratio scale, since they have a meaningful zero and ratios between values can be interpreted.
+
+To correctly analyse the chronological evolution of the market, year and month are combined into a single date variable.
+
+```{r date-and-data-quality}
+case$date <- as.Date(
+  sprintf("%04d-%02d-01", case$year, case$month)
+)
+
+missing_values <- data.frame(
+  Variable = names(case),
+  Missing_Values = colSums(is.na(case))
+)
+
+knitr::kable(
+  missing_values,
+  caption = "Missing Values by Variable",
+  row.names = FALSE
+)
+
+duplicate_check <- data.frame(
+  Check = "Duplicated city-year-month combinations",
+  Count = sum(
+    duplicated(case[c("city", "year", "month")])
+  )
+)
+
+knitr::kable(
+  duplicate_check,
+  caption = "Duplicate Check",
+  row.names = FALSE
+)
+```
+
+There are no missing values and no duplicated combinations of city, year and month.
+
+# Measures of Position, Variability and Shape
+
+Frequency distributions are appropriate for the categorical and time variables.
+
+```{r frequency-distributions}
+city_freq <- as.data.frame(table(case$city))
+names(city_freq) <- c("City", "Frequency")
+
+year_freq <- as.data.frame(table(case$year))
+names(year_freq) <- c("Year", "Frequency")
+
+month_freq <- as.data.frame(table(case$month))
+names(month_freq) <- c("Month", "Frequency")
+
+knitr::kable(
+  city_freq,
+  caption = "Frequency Distribution by City",
+  row.names = FALSE
+)
+
+knitr::kable(
+  year_freq,
+  caption = "Frequency Distribution by Year",
+  row.names = FALSE
+)
+
+knitr::kable(
+  month_freq,
+  caption = "Frequency Distribution by Month",
+  row.names = FALSE
+)
+```
+
+Each city has 60 observations, each year contains 48 observations and each calendar month contains 20 observations.
+
+This confirms that all four cities are represented throughout the same five-year period.
+
+## Sales
+
+```{r sales-statistics}
+sales_stats <- data.frame(
+  Statistic = c(
+    "Minimum",
+    "1st Quartile",
+    "Median",
+    "Mean",
+    "3rd Quartile",
+    "Maximum",
+    "Standard Deviation",
+    "Variance",
+    "IQR",
+    "Coefficient of Variation (%)"
+  ),
+  Value = c(
+    min(case$sales),
+    quantile(case$sales, 0.25),
+    median(case$sales),
+    mean(case$sales),
+    quantile(case$sales, 0.75),
+    max(case$sales),
+    sd(case$sales),
+    var(case$sales),
+    IQR(case$sales),
+    sd(case$sales) / mean(case$sales) * 100
+  )
+)
+
+sales_stats$Value <- round(sales_stats$Value, 2)
+
+knitr::kable(
+  sales_stats,
+  caption = "Descriptive Statistics for Sales",
+  digits = 2,
+  row.names = FALSE,
+  format.args = list(big.mark = ",", scientific = FALSE)
+)
+```
+
+Monthly sales per city have a mean of approximately **192.29** and a median of **175.50**.
+
+The standard deviation is approximately **79.65**, while the interquartile range is **120.00**.
+
+The mean is higher than the median, which is consistent with a positively skewed distribution. This indicates that some city-month observations with relatively high sales values extend the upper part of the distribution.
+
+## Other Quantitative Variables
+
+```{r quantitative-statistics}
+quant_vars <- c(
+  "volume",
+  "median_price",
+  "listings",
+  "months_inventory"
+)
+
+quantitative_stats <- data.frame(
+  Variable = c(
+    "Volume",
+    "Median Price",
+    "Listings",
+    "Months Inventory"
+  ),
+  Mean = sapply(case[quant_vars], mean),
+  Median = sapply(case[quant_vars], median),
+  `Standard Deviation` = sapply(case[quant_vars], sd),
+  Variance = sapply(case[quant_vars], var),
+  IQR = sapply(case[quant_vars], IQR),
+  Minimum = sapply(case[quant_vars], min),
+  Maximum = sapply(case[quant_vars], max),
+  check.names = FALSE
+)
+
+quantitative_stats[, -1] <- round(
+  quantitative_stats[, -1],
+  2
+)
+
+knitr::kable(
+  quantitative_stats,
+  caption = "Descriptive Statistics for Quantitative Variables",
+  digits = 2,
+  row.names = FALSE,
+  format.args = list(big.mark = ",", scientific = FALSE)
+)
+```
+
+Monthly sales volume has a mean of approximately **$31.01 million** and a median of approximately **$27.06 million**. The standard deviation of approximately **$16.65 million** indicates considerable dispersion in the total value of monthly sales.
+
+The mean of the monthly median prices is approximately **$132,665.42**, while the median is **$134,500.00**. Their proximity suggests that the central part of the distribution is relatively balanced, although the analysis of skewness below provides a more precise indication of its shape.
+
+Active listings have a mean of approximately **1,738.02** and a median of **1,618.50**, with a standard deviation of approximately **752.71**. This relatively large dispersion indicates substantial differences in the number of active listings across cities and periods.
+
+Months of inventory have a mean of approximately **9.19 months** and a median of **8.95 months**, with a standard deviation of approximately **2.30 months**, showing less relative dispersion than sales volume and listings.
+
+These statistics combine differences between cities, seasonal variation and changes over time. For this reason, the overall measures should be interpreted together with the conditional analyses by city, year and month presented later.
+
+## Coefficients of Variation
+
+The coefficient of variation allows variables with different units and scales to be compared in relative terms.
+
+```{r coefficients-of-variation}
+cv_values <- sapply(
+  case[c(
+    "sales",
+    "volume",
+    "median_price",
+    "listings",
+    "months_inventory"
+  )],
+  function(x) sd(x) / mean(x) * 100
+)
+
+cv_table <- data.frame(
+  Variable = c(
+    "Sales",
+    "Volume",
+    "Median Price",
+    "Listings",
+    "Months Inventory"
+  ),
+  `Coefficient of Variation (%)` = round(cv_values, 2),
+  check.names = FALSE
+)
+
+knitr::kable(
+  cv_table,
+  caption = "Coefficients of Variation",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+The coefficient of variation shows that **volume** has the greatest relative variability, at approximately **53.71%**. This indicates that monthly sales volume varies substantially relative to its mean.
+
+By contrast, **median price** has a much lower relative variability, indicating greater stability compared with the other quantitative variables.
+
+## Skewness
+
+Skewness measures the degree and direction of asymmetry in a distribution.
+
+```{r skewness}
+skewness_values <- sapply(
+  case[c(
+    "sales",
+    "volume",
+    "median_price",
+    "listings",
+    "months_inventory"
+  )],
+  function(x) mean(((x - mean(x)) / sd(x))^3)
+)
+
+skewness_table <- data.frame(
+  Variable = c(
+    "Sales",
+    "Volume",
+    "Median Price",
+    "Listings",
+    "Months Inventory"
+  ),
+  Skewness = round(skewness_values, 2)
+)
+
+knitr::kable(
+  skewness_table,
+  caption = "Skewness of Quantitative Variables",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+Sales show positive skewness, indicating that some observations with relatively high monthly sales extend the upper tail of the distribution.
+
+Sales volume also shows positive skewness and has the strongest asymmetry among the quantitative variables.
+
+Median price shows slight negative skewness, indicating a modest extension of the distribution toward lower values.
+
+Listings show positive skewness, reflecting some relatively high numbers of active listings.
+
+Months of inventory have skewness close to zero, indicating an approximately symmetric overall distribution.
+
+# Variables with the Greatest Variability and Asymmetry
+
+```{r variability-and-asymmetry}
+variability_asymmetry <- data.frame(
+  Variable = c(
+    "Sales",
+    "Volume",
+    "Median Price",
+    "Listings",
+    "Months Inventory"
+  ),
+  `Coefficient of Variation (%)` = round(cv_values, 2),
+  Skewness = round(skewness_values, 2),
+  check.names = FALSE
+)
+
+knitr::kable(
+  variability_asymmetry,
+  caption = "Relative Variability and Skewness",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+The variable with the greatest relative variability is **volume**, with a coefficient of variation of approximately **53.71%**.
+
+The coefficient of variation is appropriate for this comparison because the variables are measured using different units and scales. It expresses variability relative to the mean and therefore allows the distributions to be compared more meaningfully than using standard deviations or variances alone.
+
+The variable with the greatest absolute skewness is also **volume**, with a skewness of approximately **0.88**. The positive value indicates a right-skewed distribution, meaning that some city-month observations have considerably higher sales volumes than the majority of observations.
+
+Sales and listings also show positive asymmetry, with skewness values of approximately **0.71** and **0.65**, respectively.
+
+Median price has a modest negative skewness of approximately **-0.36**, while months of inventory has a skewness close to zero, approximately **0.04**, indicating an almost symmetric distribution.
+
+# Sales Classes, Frequencies and Gini Heterogeneity
+
+The quantitative variable `sales` is divided into five classes to obtain a simplified representation of its frequency distribution.
+
+```{r sales-classes}
+case$sales_class <- cut(
+  case$sales,
+  breaks = c(0, 100, 200, 300, 400, 500),
+  labels = c(
+    "0-99",
+    "100-199",
+    "200-299",
+    "300-399",
+    "400-499"
+  ),
+  right = FALSE
+)
+
+class_freq <- table(case$sales_class)
+class_prop <- class_freq / sum(class_freq)
+
+sales_class_table <- data.frame(
+  `Sales Class` = names(class_freq),
+  Frequency = as.numeric(class_freq),
+  Percentage = round(as.numeric(class_prop) * 100, 2),
+  check.names = FALSE
+)
+
+knitr::kable(
+  sales_class_table,
+  caption = "Frequency Distribution of Sales Classes",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+The **100-199** class is clearly the most frequent, containing **127 observations**, corresponding to approximately **52.92%** of the dataset.
+
+The **200-299** class is the second most frequent, with **67 observations (27.92%)**. Only a small proportion of observations belongs to the highest sales classes, showing that very high monthly sales values are relatively uncommon.
+
+```{r sales-class-barplot, fig.width=8, fig.height=5}
+ggplot(
+  sales_class_table,
+  aes(
+    x = `Sales Class`,
+    y = Frequency
+  )
+) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Frequency Distribution of Sales Classes",
+    x = "Number of Sales",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+
+The bar chart confirms the strong concentration of observations in the **100-199** sales class. Frequencies decrease progressively in the higher classes, which is consistent with the positive asymmetry previously observed for the `sales` variable.
+
+## Gini Heterogeneity Index
+
+```{r gini-heterogeneity}
+gini_heterogeneity <- 1 - sum(class_prop^2)
+
+gini_table <- data.frame(
+  Measure = "Gini Heterogeneity Index",
+  Value = round(gini_heterogeneity, 2)
+)
+
+knitr::kable(
+  gini_table,
+  caption = "Gini Heterogeneity Index",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+The Gini heterogeneity index is approximately **0.63**.
+
+A value of **0** would indicate that all observations belong to a single class. With five classes, the theoretical maximum is **0.80**, which would occur if the observations were distributed equally across all five classes.
+
+The observed value of **0.63** therefore indicates a moderate-to-high degree of heterogeneity among the sales classes. However, the distribution is far from uniform because more than half of the observations are concentrated in the **100-199** class.
+
+The result must also be interpreted in relation to the chosen class boundaries, since changing the intervals could modify the value of the heterogeneity index. This measure should not be confused with the Gini coefficient commonly used to measure economic inequality.
+
+# Probability Analysis
+
+The probability calculations are based on the relative frequency of observations in the dataset.
+
+```{r probabilities}
+prob_beaumont <- sum(case$city == "Beaumont") / nrow(case)
+
+prob_july <- sum(case$month == 7) / nrow(case)
+
+prob_december_2012 <- sum(
+  case$year == 2012 & case$month == 12
+) / nrow(case)
+
+probability_table <- data.frame(
+  Event = c(
+    "Observation from Beaumont",
+    "Observation from July",
+    "Observation from December 2012"
+  ),
+  `Favourable Observations` = c(
+    sum(case$city == "Beaumont"),
+    sum(case$month == 7),
+    sum(case$year == 2012 & case$month == 12)
+  ),
+  `Total Observations` = nrow(case),
+  Probability = round(
+    c(
+      prob_beaumont,
+      prob_july,
+      prob_december_2012
+    ),
+    4
+  ),
+  Percentage = round(
+    c(
+      prob_beaumont,
+      prob_july,
+      prob_december_2012
+    ) * 100,
+    2
+  ),
+  check.names = FALSE
+)
+
+knitr::kable(
+  probability_table,
+  caption = "Probability Analysis",
+  digits = c(0, 0, 0, 4, 2),
+  row.names = FALSE
+)
+```
+
+The probability that a randomly selected observation refers to **Beaumont** is **0.25**, corresponding to **25.00%**.
+
+The probability that a randomly selected observation refers to **July** is approximately **0.0833**, corresponding to **8.33%**.
+
+The probability that a randomly selected observation refers to **December 2012** is approximately **0.0167**, corresponding to **1.67%**.
+
+These probabilities describe the relative frequency of observations in the dataset. They should not be interpreted as the probability that an individual property will be sold.
+
+# Creation of New Variables
+
+## Average Property Price
+
+The dataset contains total sales volume and the number of sales. Since `volume` is expressed in millions of dollars, it is multiplied by 1,000,000 before being divided by the number of properties sold.
+
+```{r average-price}
+case$average_price <- case$volume * 1000000 / case$sales
+
+average_price_stats <- data.frame(
+  Statistic = c(
+    "Minimum",
+    "1st Quartile",
+    "Median",
+    "Mean",
+    "3rd Quartile",
+    "Maximum"
+  ),
+  Value = round(
+    c(
+      min(case$average_price),
+      quantile(case$average_price, 0.25),
+      median(case$average_price),
+      mean(case$average_price),
+      quantile(case$average_price, 0.75),
+      max(case$average_price)
+    ),
+    2
+  )
+)
+
+knitr::kable(
+  average_price_stats,
+  caption = "Descriptive Statistics for Average Property Price",
+  digits = 2,
+  row.names = FALSE,
+  format.args = list(big.mark = ",", scientific = FALSE)
+)
+```
+
+Average property prices across city-month observations range from approximately **$97,010** to **$213,234**.
+
+The median monthly average property price is approximately **$156,588**, while the unweighted mean across city-month observations is approximately **$154,320**.
+
+`average_price` represents the arithmetic mean sale price within each city-month. It differs from `median_price` because the arithmetic mean is more strongly influenced by relatively expensive properties.
+
+The mean of `average_price` across all observations gives equal weight to each city-month and therefore differs from the sales-weighted average price of all individual properties sold.
+
+## Sales-to-Listings Ratio
+
+A second variable is created to measure monthly sales relative to the number of active listings.
+
+```{r sales-to-listings}
+case$sales_to_listings_pct <-
+  case$sales / case$listings * 100
+
+sales_to_listings_stats <- data.frame(
+  Statistic = c(
+    "Minimum",
+    "1st Quartile",
+    "Median",
+    "Mean",
+    "3rd Quartile",
+    "Maximum"
+  ),
+  Value = round(
+    c(
+      min(case$sales_to_listings_pct),
+      quantile(case$sales_to_listings_pct, 0.25),
+      median(case$sales_to_listings_pct),
+      mean(case$sales_to_listings_pct),
+      quantile(case$sales_to_listings_pct, 0.75),
+      max(case$sales_to_listings_pct)
+    ),
+    2
+  )
+)
+
+knitr::kable(
+  sales_to_listings_stats,
+  caption = "Descriptive Statistics for Sales-to-Listings Ratio (%)",
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+The median sales-to-active-listings ratio is approximately **10.96%**.
+
+The central 50% of observations range from approximately **8.98% to 13.49%**, while the maximum value is approximately **38.71%**.
+
+Higher values indicate a greater number of monthly sales relative to the number of active listings.
+
+However, this indicator should not be interpreted as a direct conversion rate for individual property listings because the properties sold during a month are not necessarily the same properties included in the active listing count.
+
+The ratio therefore provides an indicator of market activity relative to available inventory, but it cannot directly establish marketing effectiveness.
+
+Data such as marketing expenditure, property views, enquiries, listing dates and time on market would be required for a more direct evaluation of marketing performance.
+
+# Conditional Analysis
+
+Conditional analysis is performed by city, year and calendar month using `dplyr`. Mean sales and standard deviations are calculated for each group in order to compare both average market activity and variability.
+
+```{r conditional-analysis}
+library(dplyr)
+
+sales_by_city <- case %>%
+  group_by(city) %>%
+  summarise(
+    Mean_Sales = mean(sales),
+    SD_Sales = sd(sales),
+    .groups = "drop"
+  )
+
+knitr::kable(
+  sales_by_city,
+  caption = "Sales Statistics by City",
+  col.names = c(
+    "City",
+    "Mean Sales",
+    "Standard Deviation"
+  ),
+  digits = 2,
+  row.names = FALSE
+)
+
+sales_by_year <- case %>%
+  group_by(year) %>%
+  summarise(
+    Mean_Sales = mean(sales),
+    SD_Sales = sd(sales),
+    .groups = "drop"
+  )
+
+knitr::kable(
+  sales_by_year,
+  caption = "Sales Statistics by Year",
+  col.names = c(
+    "Year",
+    "Mean Sales",
+    "Standard Deviation"
+  ),
+  digits = 2,
+  row.names = FALSE
+)
+
+sales_by_month <- case %>%
+  group_by(month) %>%
+  summarise(
+    Mean_Sales = mean(sales),
+    SD_Sales = sd(sales),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Month = month.name[month]
+  ) %>%
+  select(
+    Month,
+    Mean_Sales,
+    SD_Sales
+  )
+
+sales_by_month$Month <- factor(
+  sales_by_month$Month,
+  levels = month.name
+)
+
+knitr::kable(
+  sales_by_month,
+  caption = "Sales Statistics by Calendar Month",
+  col.names = c(
+    "Month",
+    "Mean Sales",
+    "Standard Deviation"
+  ),
+  digits = 2,
+  row.names = FALSE
+)
+```
+
+## Sales by City
+
+**Tyler** has the highest mean monthly sales, approximately **269.75**, while **Wichita Falls** has the lowest, approximately **116.07**.
+
+**Bryan-College Station** shows the greatest absolute variability in monthly sales, with a standard deviation of approximately **84.98**. Therefore, the cities differ not only in their average sales levels but also in the degree of monthly variability.
+
+```{r mean-sales-city, fig.width=8, fig.height=5}
+ggplot(
+  sales_by_city,
+  aes(
+    x = reorder(city, Mean_Sales),
+    y = Mean_Sales
+  )
+) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Mean Monthly Sales by City",
+    x = "City",
+    y = "Mean Monthly Sales"
+  ) +
+  theme_minimal()
+```
+
+The bar chart compares average monthly sales across the four cities between 2010 and 2014.
+
+Tyler records the highest mean monthly sales (269.75), followed by Bryan-College Station (205.97) and Beaumont (177.38). Wichita Falls has the lowest mean (116.07).
+
+However, average sales alone do not describe monthly variability. The conditional statistics show that Bryan-College Station has the highest standard deviation (84.98), indicating greater absolute fluctuations in monthly sales, even though Tyler has the highest average.
+
+These results show that both average sales and variability should be considered when comparing market activity across the four cities.
+
+## Sales by Year
+
+Mean monthly sales per city decrease slightly from approximately **168.67 in 2010** to **164.12 in 2011**.
+
+Sales subsequently increase, reaching approximately **230.60 in 2014**. The standard deviations also increase over the period, indicating that differences in monthly sales become more pronounced.
+
+These yearly standard deviations combine differences between cities and months and therefore should not be interpreted as variability within a single city.
+
+```{r mean-sales-year, fig.width=8, fig.height=5}
+ggplot(
+  sales_by_year,
+  aes(
+    x = year,
+    y = Mean_Sales
+  )
+) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(
+    breaks = sales_by_year$year
+  ) +
+  labs(
+    title = "Mean Monthly Sales by Year",
+    x = "Year",
+    y = "Mean Monthly Sales"
+  ) +
+  theme_minimal()
+```
+
+The line chart shows a slight decrease in mean monthly sales per city from 168.67 in 2010 to 164.12 in 2011, followed by an upward trend reaching 230.60 in 2014.
+
+Between 2011 and 2014, mean monthly sales increased by approximately 40.50%, indicating a substantial recovery in overall market activity during the observed period.
+
+However, the annual averages combine observations from all four cities. Therefore, the overall increase does not necessarily indicate that every city experienced the same growth. The standard deviations reported in the conditional analysis also indicate increasing dispersion in sales observations over time.
+
+## Sales by Month
+
+Mean sales are lowest in **January**, at approximately **127.40**, and highest in **June**, at approximately **243.55**.
+
+Sales remain relatively high between **May and August**, suggesting a seasonal pattern in market activity.
+
+**July** has the greatest dispersion across cities and years, with a standard deviation of approximately **96.27**, indicating substantial differences in July sales observations.
+
+```{r mean-sales-month, fig.width=9, fig.height=5}
+ggplot(
+  sales_by_month,
+  aes(
+    x = Month,
+    y = Mean_Sales
+  )
+) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Mean Sales by Calendar Month (2010-2014)",
+    x = "Month",
+    y = "Mean Monthly Sales"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+```
+
+The bar chart highlights a seasonal pattern in average monthly sales across the four cities between 2010 and 2014.
+
+January records the lowest mean monthly sales (127.40), while June has the highest (243.55), almost twice the January value. Sales activity remains relatively high between May and August, suggesting stronger market activity during late spring and summer.
+
+However, the conditional analysis also shows substantial variability. July has the highest standard deviation (96.27), indicating considerable differences in sales observations across cities and years.
+
+These results suggest seasonal fluctuations in the real estate market, although the aggregated averages do not establish whether all four cities follow exactly the same seasonal pattern.
+
+# Visualisations with ggplot2
+
+## Distribution of Median Prices by Year and City
+
+To compare both geographical and temporal differences, the distribution of monthly median prices is analysed by year and city in the same graph.
+
+```{r median-price-boxplot, fig.width=9, fig.height=6}
+ggplot(
+  case,
+  aes(
+    x = factor(year),
+    y = median_price,
+    fill = city
+  )
+) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Monthly Median Prices by Year and City",
+    x = "Year",
+    y = "Monthly Median Sale Price ($)",
+    fill = "City"
+  ) +
+  theme_minimal()
+```
+
+The boxplot shows differences in monthly median property prices across the four cities between 2010 and 2014.
+
+Bryan-College Station generally records the highest prices. Its median of monthly median prices increased from $151,800 in 2010 to $170,900 in 2014. Tyler also shows an increase, from $134,450 to $151,900, while Wichita Falls maintains substantially lower price levels.
+
+The boxes represent the interquartile ranges, allowing us to compare the variability of monthly median prices within each city and year. The central lines indicate the medians. Observations outside the whiskers are potential outliers and do not necessarily represent data errors.
+
+Overall, the results suggest differences in property price levels across cities and a general increase over the observed period. However, these distributions refer to monthly median prices rather than individual property prices.
+
+## Distribution of Sales Volume by Year and City
+
+To analyse both geographical and temporal differences in sales volume, year and city are represented together in the same boxplot.
+
+```{r volume-year-city-boxplot, fig.width=9, fig.height=6}
+ggplot(
+  case,
+  aes(
+    x = factor(year),
+    y = volume,
+    fill = city
+  )
+) +
+  geom_boxplot() +
+  labs(
+    title = "Distribution of Monthly Sales Volume by Year and City",
+    x = "Year",
+    y = "Monthly Sales Volume (Million $)",
+    fill = "City"
+  ) +
+  theme_minimal()
+```
+
+The graph shows clear differences in monthly sales volume between cities and also illustrates how these differences evolve over time.
+
+Tyler generally records the highest sales volume levels, with an overall median monthly sales volume of approximately **$45.08 million**, while Wichita Falls records the lowest, at approximately **$13.71 million**.
+
+Bryan-College Station shows substantial variability in monthly sales volume, with a standard deviation of approximately **$17.25 million** and an interquartile range of approximately **$23.72 million**.
+
+Sales volume generally increases during the later years of the period, particularly in **2013 and 2014**. The overall median monthly sales volume reaches approximately **$36.83 million in 2014**.
+
+The combined graph therefore highlights both geographical differences between cities and changes in sales volume over time.
+
+## Stacked Sales by Month and City
+
+```{r stacked-sales, fig.width=9, fig.height=5}
+ggplot(
+  case,
+  aes(
+    x = factor(month),
+    y = sales,
+    fill = city
+  )
+) +
+  geom_col() +
+  labs(
+    title = "Total Sales by Calendar Month and City (2010-2014)",
+    x = "Month",
+    y = "Total Number of Sales",
+    fill = "City"
+  ) +
+  theme_minimal()
+```
+
+`geom_col()` uses the actual values of the `sales` variable as the heights of the bars.
+
+Because the bars are stacked, observations corresponding to the same month are added together.
+
+By contrast, `geom_bar()` would count the number of rows by default rather than use the existing sales values.
+
+The stacked bar chart shows a clear seasonal pattern in total property sales across the four cities during 2010–2014.
+
+June records the highest number of sales (4,871), while January has the lowest (2,548). This substantial difference indicates stronger market activity during late spring and summer.
+
+Tyler contributes the highest number of sales in every calendar month, increasing from 907 sales in January to 1,635 in June. Bryan-College Station also shows a substantial difference, with 591 sales in January and 1,597 in June.
+
+These results highlight both seasonal fluctuations and differences in sales activity between cities. However, the totals combine observations from five years, so they describe the overall seasonal pattern rather than individual annual trends.
+
+## Normalised Stacked Sales
+
+```{r normalized-sales, fig.width=9, fig.height=5}
+ggplot(
+  case,
+  aes(
+    x = factor(month),
+    y = sales,
+    fill = city
+  )
+) +
+  geom_col(position = "fill") +
+  scale_y_continuous(
+    labels = function(x) {
+      paste0(round(x * 100), "%")
+    }
+  ) +
+  labs(
+    title = "City Shares of Sales by Calendar Month (2010-2014)",
+    x = "Month",
+    y = "Share of Sales",
+    fill = "City"
+  ) +
+  theme_minimal()
+```
+
+In the normalised stacked bar chart, each bar represents 100% of the total sales recorded in a given calendar month across the four cities during 2010–2014. The coloured sections therefore show the relative contribution of each city rather than absolute sales numbers.
+
+Tyler records the largest share of sales in every month, accounting for 35.60% in January and 33.57% in June. Bryan-College Station shows a notable increase in its relative contribution, from 23.19% in January to 32.79% in June.
+
+These results highlight differences in the seasonal distribution of sales among cities. However, relative percentages should be interpreted alongside absolute sales totals, since a higher percentage does not necessarily correspond to a greater number of sales across different months.
+
+## Monthly Sales by City and Year
+
+Year is added to the analysis through separate panels using `facet_wrap()`. This avoids overcrowding the graph while allowing the same visual structure to be compared across different years.
+
+```{r sales-city-year, fig.width=9, fig.height=7}
+ggplot(
+  case,
+  aes(
+    x = factor(month),
+    y = sales,
+    fill = city
+  )
+) +
+  geom_col() +
+  facet_wrap(
+    ~ year,
+    ncol = 2
+  ) +
+  labs(
+    title = "Monthly Sales by City and Year",
+    x = "Month",
+    y = "Total Number of Sales",
+    fill = "City"
+  ) +
+  theme_minimal()
+```
+
+In each year, total sales are generally higher during spring and summer than in the first months of the year. For example, across the four cities, monthly sales increased from 627 in January 2014 to 1,177 in June 2014, before declining to 843 in December.
+
+The graph also highlights differences between cities. Tyler records the highest annual number of sales throughout the period, increasing from 2,730 in 2010 to 3,978 in 2014. Bryan-College Station also shows growth, from 2,011 to 3,123 annual sales. In contrast, Wichita Falls records 1,481 sales in 2010 and 1,404 in 2014, without a comparable growth trend.
+
+The panels use the same vertical scale, allowing direct comparisons between years. The higher sales levels observed in 2013 and 2014, particularly in Tyler and Bryan-College Station, indicate differences in market development between cities.
+
+Overall, the graph provides evidence of seasonal fluctuations and different historical sales trends. However, these descriptive results do not establish the causes of the observed differences.
+
+# Historical Sales Trends
+
+To analyse changes in sales over time, the previously created `date` variable is used. All four cities are represented in the same plotting window to allow direct comparison of their historical trends.
+
+```{r sales-trend, fig.width=10, fig.height=6}
+ggplot(
+  case,
+  aes(
+    x = date,
+    y = sales,
+    color = city,
+    group = city
+  )
+) +
+  geom_line(linewidth = 0.8) +
+  labs(
+    title = "Monthly Sales Trends by City (2010-2014)",
+    x = "Year",
+    y = "Number of Sales",
+    color = "City"
+  ) +
+  theme_minimal()
+```
+
+The use of the `date` variable ensures that observations are displayed in chronological order. Representing all four cities in the same graph makes it possible to compare their sales levels and trends directly.
+
+Tyler records the highest sales levels for most of the observed period and shows substantial growth. Its mean monthly sales increase from approximately **227.50 in 2010** to **331.50 in 2014**.
+
+Bryan-College Station also shows strong growth, with mean monthly sales increasing from approximately **167.58 in 2010** to **260.25 in 2014**. Both cities display recurring seasonal peaks, indicating that sales activity varies systematically during the year.
+
+Beaumont shows a more moderate overall increase. Its mean monthly sales rise from approximately **156.17 in 2010** to **213.67 in 2014**, although the trend includes an initial decline in 2011.
+
+Wichita Falls remains at a substantially lower sales level throughout the period and does not show the same sustained upward trend. Its mean monthly sales change from approximately **123.42 in 2010** to **117.00 in 2014**.
+
+Overall, the graph highlights clear differences in both sales levels and growth patterns among the four cities. These findings refer only to the cities and the **2010-2014** period included in the dataset and should not automatically be generalised to the entire Texas real estate market or to later periods.
+
+# Conclusions and Recommendations
+
+## Main Findings
+
+The analysis identifies several relevant patterns in the historical data.
+
+After a slight decline in 2011, overall sales activity increases considerably.
+
+```{r annual-total-sales}
+annual_total_sales <- case %>%
+  group_by(year) %>%
+  summarise(
+    Total_Sales = sum(sales),
+    .groups = "drop"
+  )
+
+knitr::kable(
+  annual_total_sales,
+  caption = "Total Annual Sales",
+  col.names = c(
+    "Year",
+    "Total Sales"
+  ),
+  digits = 0,
+  row.names = FALSE,
+  format.args = list(big.mark = ",", scientific = FALSE)
+)
+```
+
+Total annual sales increase from **7,878 in 2011** to **11,069 in 2014**, corresponding to growth of approximately **40.5%**.
+
+Tyler records the highest overall sales activity, with an average of approximately **269.75 property sales per month**.
+
+It also records the highest median monthly sales volume, approximately **$45.08 million**.
+
+Bryan-College Station has the highest typical price level, with a median of monthly median prices of approximately **$155,400**.
+
+It also displays substantial sales growth and relatively high variability in both monthly sales and monthly sales volume.
+
+Beaumont shows an overall increase in sales during the period, despite an initial decline in 2011.
+
+Wichita Falls has the lowest sales activity and price levels and does not show a comparable sustained increase in sales.
+
+A clear seasonal pattern is also visible.
+
+Across cities and years, average sales are lowest in January and highest in June, while market activity remains relatively high between May and August.
+
+Sales volume is the quantitative variable with the greatest relative variability, with a coefficient of variation of approximately **53.71%**.
+
+It is also the variable with the strongest asymmetry, showing positive skewness caused by some relatively high-value city-month observations.
+
+The sales-to-active-listings ratio has a median of approximately **10.96%** and provides an indicator of sales activity relative to available inventory.
+
+However, it cannot directly measure the effectiveness of individual property listings or marketing campaigns.
+
+## Recommendations for Texas Realty Insights
+
+Based on the historical results, Tyler and Bryan-College Station may deserve further investigation as potential priority markets.
+
+Tyler combines high sales activity with high total sales volume, while Bryan-College Station combines relatively high typical prices with substantial sales growth.
+
+However, any current investment or business decision should first be supported by updated market data and should also consider acquisition costs, competition and profitability.
+
+The historical seasonal pattern suggests that listings and sales resources could be prepared in advance of the stronger **May-August** period.
+
+Before increasing marketing expenditure, however, the company should verify whether the same seasonal pattern remains present in more recent data.
+
+Pricing strategies should also reflect differences between local markets.
+
+The observed differences in monthly median prices suggest that a single pricing approach would not be appropriate for all cities.
+
+Property characteristics and local comparable sales should also be considered when establishing prices for individual listings.
+
+Sales, active listings and months of inventory should be monitored together.
+
+A relatively high sales-to-listings ratio combined with lower inventory duration may indicate a more active market, although this relationship should be investigated statistically rather than assumed.
+
+To evaluate marketing effectiveness more directly, Texas Realty Insights should collect additional information such as:
+
+- marketing expenditure
+- listing views
+- customer enquiries
+- listing dates
+- time on market
+- final sale outcomes
+
+These variables would allow a more direct evaluation of marketing performance and cost-effectiveness.
+
+# Limitations
+
+The dataset contains aggregated monthly observations rather than information on individual properties.
+
+Consequently, differences in prices may reflect changes in the types of properties sold as well as genuine changes in market conditions.
+
+Sales values and prices are expressed in nominal dollars and have not been adjusted for inflation.
+
+The analysis is descriptive.
+
+It identifies historical patterns and statistical relationships but does not establish their causes and cannot guarantee that the same patterns will continue in the future.
+
+Updated data, together with detailed information on individual properties and marketing activities, would strengthen future analyses and support more informed business decisions.
