@@ -1,5 +1,9 @@
 # Texas Real Estate Market Analysis
 
+## View Full Project Report
+
+📊 [View Complete Analysis on RPubs](https://rpubs.com/Salvo89/1466688)
+
 ### Exploratory Data Analysis with R | Statistical Analysis & Data Visualization
 
 ## Project Overview
